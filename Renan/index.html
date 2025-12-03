@@ -1,0 +1,27 @@
+<!-- ===== index.html =====
+Save this as index.html and keep track.js in the same folder.
+Open index.html in a modern browser (Chrome/Firefox).
+-->
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pista 3D WebGL (3 vias) - mapa para jogo</title>
+  <style>
+    html,body{height:100%;margin:0;background:#111;color:#eee;font-family:sans-serif}
+    #ui{position:fixed;left:10px;top:10px;z-index:3}
+    canvas{display:block;width:100vw;height:100vh}
+    .hint{background:rgba(0,0,0,0.4);padding:8px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div id="ui" class="hint">
+    <div><strong>Controles:</strong> ← / → ou A / D para trocar de via. Espaço para pular.</div>
+    <div style="margin-top:6px;font-size:13px;opacity:0.9">Clique no canvas para focar. Segure/ou toque para alternar rápido.</div>
+  </div>
+  <canvas id="glcanvas"></canvas>
+  <script src="track.js"></script>
+</body>
+</html>
