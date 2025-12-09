@@ -20,7 +20,6 @@ const fsSource = `
     varying highp vec2 vTextureCoord;
     uniform sampler2D uSampler;
     void main(void) {
-        // Correção do texture2D (D maiúsculo) aplicada
         gl_FragColor = texture2D(uSampler, vTextureCoord);
     }
 `;
@@ -119,7 +118,7 @@ for (let i = 0; i <= segments; i++) {
     // Borda (fatiazinha dourada da parte esquerda)
     const rimU1 = 0.0;
     const rimU2 = 0.05; // 5% da largura total 
-    
+
     positions.push(x, y, thickness/2);            textureCoords.push(rimU1, 0); 
     positions.push(nextX, nextY, thickness/2);    textureCoords.push(rimU2, 0);
     positions.push(x, y, -thickness/2);           textureCoords.push(rimU1, 0.1);
@@ -183,7 +182,7 @@ ctx.fillRect(0, 0, 512, 512);
 ctx.beginPath();
 ctx.arc(256, 256, 240, 0, Math.PI * 2);
 ctx.lineWidth = 20;
-ctx.strokeStyle = '#B8860B'; // Azul escuro
+ctx.strokeStyle = '#B8860B';
 ctx.stroke();
 
 // Circulo e UNIFESP
@@ -217,39 +216,142 @@ gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ctx.canvas);
 // Matrizes
 
 const mat4 = {
-    perspective: function(fieldOfViewInRadians, aspect, near, far) {
-        const f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians);
-        const rangeInv = 1.0 / (near - far);
+    perspective: function(fov, aspect, near, far) {
+        const f = 1.0 / Math.tan(fov / 2);
+        const nf = 1 / (near - far);
         return [
-            f / aspect, 0, 0, 0,
-            0, f, 0, 0,
-            0, 0, (near + far) * rangeInv, -1,
-            0, 0, near * far * rangeInv * 2, 0
+            f / aspect, 0, 0, 0, 
+            0, f, 0, 0, 
+            0, 0, (far + near) * nf, -1, 
+            0, 0, (2 * far * near) * nf, 0
         ];
     },
-    create: function() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; },
-    translate: function(m, tx, ty, tz) {
-        m[12] += tx; m[13] += ty; m[14] += tz;
+    create: function() { 
+        return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; 
+    },
+    translate: function(m, x, y, z) { 
+        m[12] += x; m[13] += y; m[14] += z; 
     },
     rotateY: function(m, angle) {
         const c = Math.cos(angle), s = Math.sin(angle);
-        const mv0 = m[0], mv2 = m[2], mv8 = m[8], mv10 = m[10];
+        const mv0 = m[0], mv4 = m[4], mv8 = m[8];
+        const mv2 = m[2], mv6 = m[6], mv10 = m[10];
+        
         m[0] = c * mv0 - s * mv2;
-        m[2] = c * mv2 + s * mv0;
+        m[4] = c * mv4 - s * mv6;
         m[8] = c * mv8 - s * mv10;
+
+        m[2] = c * mv2 + s * mv0;
+        m[6] = c * mv6 + s * mv4;
         m[10] = c * mv10 + s * mv8;
+    },
+    scale: function(m, x, y, z) {
+        // Multiplicamos as colunas inteiras
+        // Isso garante que mesmo se o objeto estiver virado, o tamanho diminui por igual em todos os lados.
+        
+        m[0] *= x; m[1] *= x; m[2] *= x; m[3] *= x;
+        m[4] *= y; m[5] *= y; m[6] *= y; m[7] *= y;
+        m[8] *= z; m[9] *= z; m[10] *= z; m[11] *= z;
     }
 };
 
-// Renderização
+// Renderização e lógica inicial
 
 const uProjectionMatrix = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
 const uModelViewMatrix = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
 
+// Configs do mapa
+const LIMITE_LATERAL = 4.5; // O jogador só vai até -4.5 (esq) e +4.5 (dir)
+const LIMITE_PROFUNDIDADE = -50.0; // O mapa vai até -50 pra frente
+
 let rotation = 0;
+
+// Posição da moeda
+let coinX = 0.0;
+let coinY = 0.0;
+let coinZ = -10.0; 
+let coinScale = 0.4;
+
+// Posição do jogador
+let playerX = 0.0;
+let playerZ = -2.0; // Começa um pouco recuado
+
+// Elementos temporizador e contabilizador
+const elTimer = document.getElementById('timer-display');
+const elCoins = document.getElementById('coin-display');
+
+let startTime = Date.now();
+let moedasColetadas = 0;
+
+// controles
+const keys = {};
+document.addEventListener('keydown', (e) => keys[e.code] = true);
+document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+function moverJogador() {
+    const velocidadeLateral = 0.2;
+    const velocidadeFrente = 0.3;
+    
+    // Anda sozinho para frente (auto-runner)
+    playerZ -= velocidadeFrente; 
+
+    if (keys['ArrowLeft'] || keys['KeyA']) {
+        if (playerX > -LIMITE_LATERAL) { // Só move se não passou do limite esquerdo
+            playerX -= velocidadeLateral;
+        }
+    }
+    
+    if (keys['ArrowRight'] || keys['KeyD']) {
+        if (playerX < LIMITE_LATERAL) { // Só move se não passou do limite direito
+            playerX += velocidadeLateral;
+        }
+    }
+}
+
+// Colisoes e respawn
+function checarColisao() {
+    let dx = playerX - coinX;
+    let dz = playerZ - coinZ;
+    let distancia = Math.sqrt(dx*dx + dz*dz);
+
+    if (distancia < 1.5) {
+        coletarMoeda();
+    }
+    
+    // Se a moeda ficou muito para trás do jogador (perdeu a moeda) ela reaparece lá na frente para dar outra chance
+    if (coinZ > playerZ + 2.0) {
+        respawnMoedaLonge();
+    }
+}
+
+function respawnMoedaLonge() {
+    // Gera moeda sempre à frente do jogador com X aleatório dentro dos limites do mapa e Z 20 a 40 unidades à frente de onde o jogador está agora
+    
+    coinX = (Math.random() * (LIMITE_LATERAL * 2)) - LIMITE_LATERAL;
+    coinZ = playerZ - (20 + Math.random() * 20); 
+}
+
+function coletarMoeda() {
+    moedasColetadas++;
+    elCoins.innerText = `COINS: ${moedasColetadas}`;
+    rotation += 5.0;
+    respawnMoedaLonge();
+}
+
+// loop
+function atualizarInterface() {
+    let diff = Math.floor((Date.now() - startTime) / 1000);
+    let minString = Math.floor(diff / 60).toString().padStart(2, '0');
+    let secString = (diff % 60).toString().padStart(2, '0');
+    elTimer.innerText = `TIME: ${minString}:${secString}`;
+}
 
 function render() {
     resizeCanvas(); 
+    
+    moverJogador();
+    checarColisao();
+    atualizarInterface();
 
     gl.clearColor(0.1, 0.1, 0.1, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -260,8 +362,20 @@ function render() {
     const projectionMatrix = mat4.perspective(45 * Math.PI / 180, aspect, 0.1, 100.0);
 
     const modelViewMatrix = mat4.create();
-    mat4.translate(modelViewMatrix, 0.0, 0.0, -5.0);
+
+    // Camera terceira pessoa um pouco acima e atrás
+    let cameraX = playerX; 
+    let cameraY = 1.0; 
+    let cameraZ = playerZ + 5.0; // Camera 5 passos atrás do jogador
+    
+    // A moeda se move em relação à câmera
+    let drawX = coinX - cameraX;
+    let drawY = coinY - cameraY;
+    let drawZ = coinZ - cameraZ;
+    
+    mat4.translate(modelViewMatrix, drawX, drawY, drawZ);
     mat4.rotateY(modelViewMatrix, rotation);
+    mat4.scale(modelViewMatrix, coinScale, coinScale, coinScale);
 
     gl.uniformMatrix4fv(uProjectionMatrix, false, new Float32Array(projectionMatrix));
     gl.uniformMatrix4fv(uModelViewMatrix, false, new Float32Array(modelViewMatrix));
