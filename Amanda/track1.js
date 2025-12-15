@@ -1,4 +1,4 @@
-// track.js - WebGL COMPLETO COM CÂMERA EM PRIMEIRA PESSOA
+// track.js - WebGL COMPLETO COM ILUMINAÇÃO
 'use strict';
 
 const canvas = document.getElementById('glCanvas');
@@ -162,8 +162,8 @@ void main(){
 }
 `;
 
-// ---------- SHADERS DAS MOEDAS E BARRIS ----------
-const VS_COIN = `
+// ---------- SHADERS COM ILUMINAÇÃO (Moedas e Barris) ----------
+const VS_COIN = window.shadersComLuz ? window.shadersComLuz.vertex : `
 attribute vec3 aVertexPosition;
 attribute vec2 aTextureCoord;
 uniform mat4 uModelViewMatrix;
@@ -175,7 +175,7 @@ void main(void) {
 }
 `;
 
-const FS_COIN = `
+const FS_COIN = window.shadersComLuz ? window.shadersComLuz.fragment : `
 varying highp vec2 vTextureCoord;
 uniform sampler2D uSampler;
 void main(void) {
@@ -200,12 +200,10 @@ const FS_BOMB = `
 varying highp vec2 vTextureCoord;
 uniform sampler2D uSampler;
 void main(void) {
-    // CORPO DA BOMBA TOTALMENTE PRETO
     if(vTextureCoord.x < 0.5){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
-    // PAVIO / FOGO
     gl_FragColor = texture2D(uSampler, vTextureCoord);
 }
 `;
@@ -234,7 +232,7 @@ function createProgram(vsSrc, fsSrc){
 // Programa principal
 const program = createProgram(VS, FS);
 
-// Programa das moedas e barris
+// Programa das moedas e barris COM ILUMINAÇÃO
 const programCoin = createProgram(VS_COIN, FS_COIN);
 
 // Programa das bombas
@@ -254,9 +252,16 @@ const uTime = gl.getUniformLocation(program, 'uTime');
 // locations programa moedas/barris
 const aVertexPosition = gl.getAttribLocation(programCoin, 'aVertexPosition');
 const aTextureCoord = gl.getAttribLocation(programCoin, 'aTextureCoord');
+const aNormalCoin = gl.getAttribLocation(programCoin, 'aVertexNormal');
 const uProjectionMatrix = gl.getUniformLocation(programCoin, 'uProjectionMatrix');
 const uModelViewMatrix = gl.getUniformLocation(programCoin, 'uModelViewMatrix');
 const uSampler = gl.getUniformLocation(programCoin, 'uSampler');
+
+// Configurar iluminação para moedas/barris
+let configLuzCoin = null;
+if (window.configurarIluminacao) {
+    configLuzCoin = window.configurarIluminacao(gl, programCoin);
+}
 
 // locations programa bombas
 const aBombVertexPosition = gl.getAttribLocation(programBomb, 'aVertexPosition');
@@ -420,7 +425,7 @@ const bufCharacterArmRight = createBufferWithUV(characterParts.armRight);
 const bufCharacterLegLeft = createBufferWithUV(characterParts.legLeft);
 const bufCharacterLegRight = createBufferWithUV(characterParts.legRight);
 
-// ---------- COIN GEOMETRY ----------
+// ---------- COIN GEOMETRY COM NORMAIS ----------
 const coinPositions = [];
 const coinTextureCoords = [];
 const coinRadius = 0.3;
@@ -476,13 +481,19 @@ for (let i = 0; i <= coinSegments; i++) {
     coinTextureCoords.push(0, 0.1);
 }
 
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+const coinPosBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, coinPosBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coinPositions), gl.STATIC_DRAW);
 
-const textureCoordBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
+const coinUVBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, coinUVBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coinTextureCoords), gl.STATIC_DRAW);
+
+// Calcular normais da moeda
+const coinNormals = window.calcularNormais ? window.calcularNormais(coinPositions) : [];
+const coinNormalBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, coinNormalBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coinNormals), gl.STATIC_DRAW);
 
 // Textura da moeda
 const ctx = document.createElement('canvas').getContext('2d');
@@ -529,7 +540,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ctx.canvas);
 
-// ---------- BARREL GEOMETRY ----------
+// ---------- BARREL GEOMETRY COM NORMAIS ----------
 function createBarrelGeometry(){
   const segments = 40;
   const stacks = 32;
@@ -546,7 +557,6 @@ function createBarrelGeometry(){
   const positions = [];
   const uvs = [];
 
-  // CORPO DO BARRIL
   for (let j = 0; j < stacks; j++) {
     const v0 = j / stacks;
     const v1 = (j + 1) / stacks;
@@ -574,54 +584,50 @@ function createBarrelGeometry(){
     }
   }
 
-  // TAMPA SUPERIOR
   const topY = halfH;
   const topR = radiusAtY(topY) * 0.95;
   for (let i = 0; i < segments; i++) {
     const a0 = (i / segments) * Math.PI * 2;
     const a1 = ((i + 1) / segments) * Math.PI * 2;
-    
     const x0 = Math.cos(a0) * topR;
     const z0 = Math.sin(a0) * topR;
     const x1 = Math.cos(a1) * topR;
     const z1 = Math.sin(a1) * topR;
-
     positions.push(0, topY, 0, x0, topY, z0, x1, topY, z1);
     uvs.push(0.5, 0.5, 0.5 + Math.cos(a0)*0.25, 0.5 + Math.sin(a0)*0.25, 0.5 + Math.cos(a1)*0.25, 0.5 + Math.sin(a1)*0.25);
   }
 
-  // TAMPA INFERIOR
   const bottomY = -halfH;
   const bottomR = radiusAtY(bottomY) * 0.95;
   for (let i = 0; i < segments; i++) {
     const a0 = (i / segments) * Math.PI * 2;
     const a1 = ((i + 1) / segments) * Math.PI * 2;
-    
     const x0 = Math.cos(a0) * bottomR;
     const z0 = Math.sin(a0) * bottomR;
     const x1 = Math.cos(a1) * bottomR;
     const z1 = Math.sin(a1) * bottomR;
-
     positions.push(0, bottomY, 0, x1, bottomY, z1, x0, bottomY, z0);
     uvs.push(0.5, 0.5, 0.5 + Math.cos(a1)*0.25, 0.5 + Math.sin(a1)*0.25, 0.5 + Math.cos(a0)*0.25, 0.5 + Math.sin(a0)*0.25);
   }
 
-  const combined = [];
-  for(let i = 0; i < positions.length / 3; i++){
-    combined.push(
-      positions[i*3], positions[i*3+1], positions[i*3+2],
-      uvs[i*2], uvs[i*2+1]
-    );
-  }
-
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(combined), gl.STATIC_DRAW);
-  buf.count = positions.length / 3;
-  return buf;
+  return { positions, uvs, count: positions.length / 3 };
 }
 
-const bufBarrel = createBarrelGeometry();
+const barrelGeom = createBarrelGeometry();
+
+const barrelPosBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, barrelPosBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(barrelGeom.positions), gl.STATIC_DRAW);
+
+const barrelUVBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, barrelUVBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(barrelGeom.uvs), gl.STATIC_DRAW);
+
+// Calcular normais do barril
+const barrelNormals = window.calcularNormais ? window.calcularNormais(barrelGeom.positions) : [];
+const barrelNormalBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, barrelNormalBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(barrelNormals), gl.STATIC_DRAW);
 
 // Textura do barril
 const ctxWood = document.createElement('canvas').getContext('2d');
@@ -668,7 +674,6 @@ function createBombGeometry(){
   const positions = [];
   const uvs = [];
   
-  // ESFERA PRETA
   const stacks = 32, slices = 32, R = 0.3;
   
   for (let i = 0; i < stacks; i++) {
@@ -695,7 +700,6 @@ function createBombGeometry(){
     }
   }
   
-  // PAVIO CURVO
   const fuseSegments = 50;
   const fuseRadius = 0.06 * 0.3;
   const fuseRadialSteps = 30;
@@ -1002,7 +1006,7 @@ obstacles.forEach(obs => {
 // ---------- BOMBAS ESTÁTICAS NA PISTA ----------
 const staticBombs = [];
 
-for(let i = 0; i < 8; i++){
+for(let i = 0; i < 6; i++){  // ✅ REDUZIDO DE 12 PARA 6
   const randomLane = Math.floor(Math.random() * 3);
   const randomZ = -25 - Math.random() * (TRACK_LENGTH - 35);
   
@@ -1016,7 +1020,6 @@ for(let i = 0; i < 8; i++){
   });
 }
 
-// Evitar sobreposição de bombas com barris
 staticBombs.forEach(bomb => {
   obstacles.forEach(obs => {
     const dist = Math.abs(obs.z - bomb.z);
@@ -1026,7 +1029,6 @@ staticBombs.forEach(bomb => {
   });
 });
 
-// Evitar sobreposição de bombas com moedas
 staticBombs.forEach(bomb => {
   coins.forEach(coin => {
     const dist = Math.abs(bomb.z - coin.z);
@@ -1039,8 +1041,8 @@ staticBombs.forEach(bomb => {
 // ---------- FALLING BOMBS ----------
 const fallingBombs = [];
 let bombSpawnTimer = 0;
-const BOMB_SPAWN_INTERVAL = 1.5;
-const BOMB_START_Z = -120;
+const BOMB_SPAWN_INTERVAL = 2.5;  // ✅ AUMENTADO DE 1.5 PARA 2.5
+const BOMB_START_Z = -100;  // ✅ ALTERADO DE -120 PARA -100
 
 function spawnBomb(){
   if(player.z > BOMB_START_Z) return;
@@ -1124,15 +1126,14 @@ function updateUI(){
   const elapsed = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
   const secs = (elapsed % 60).toString().padStart(2, '0');
-  timerDisplay.textContent = `Tempo: ${mins}:${secs}`;
-  coinDisplay.textContent = `Total de Moedas: ${player.coinsCollected}`;
+  timerDisplay.textContent = `TIME: ${mins}:${secs}`;
+  coinDisplay.textContent = `COINS: ${player.coinsCollected}`;
 }
 
 // ---------- EVENT LISTENER COM CÂMERA ----------
 window.addEventListener('keydown', (e)=>{
   const k = e.key.toLowerCase();
   
-  // Movimento lateral
   if(k === 'arrowleft' || k === 'a'){
     player.targetLane = Math.max(0, player.targetLane - 1);
   }
@@ -1140,7 +1141,6 @@ window.addEventListener('keydown', (e)=>{
     player.targetLane = Math.min(2, player.targetLane + 1);
   }
   
-  // TROCAR CÂMERA com seta para cima
   if(e.key === 'ArrowUp'){
     cameraMode = (cameraMode + 1) % 2;
     console.log(cameraMode === 0 ? "Câmera: Terceira Pessoa" : "Câmera: Primeira Pessoa");
@@ -1293,15 +1293,12 @@ function drawAnimatedCharacter(baseX, baseY, baseZ){
   const armAngle = Math.sin(runAnimTime) * 0.5;
   const bodyBob = Math.abs(Math.sin(runAnimTime * 2)) * 0.08;
   
-  // CORPO
   let m = translate(identity(), identity(), [baseX, baseY + 0.25 + bodyBob, baseZ]);
   draw(bufCharacterBody, m, [0.2, 0.5, 0.95]);
   
-  // CABEÇA
   m = translate(identity(), identity(), [baseX, baseY + 0.75 + bodyBob, baseZ]);
   draw(bufCharacterHead, m, [0.95, 0.75, 0.6]);
   
-  // BRAÇO ESQUERDO
   const shoulderLeftX = baseX - 0.28;
   const shoulderLeftY = baseY + 0.55 + bodyBob;
   const shoulderLeftZ = baseZ;
@@ -1311,7 +1308,6 @@ function drawAnimatedCharacter(baseX, baseY, baseZ){
   m = translate(identity(), m, [0, -0.25, 0]);
   draw(bufCharacterArmLeft, m, [0.2, 0.5, 0.95]);
   
-  // BRAÇO DIREITO
   const shoulderRightX = baseX + 0.28;
   const shoulderRightY = baseY + 0.55 + bodyBob;
   const shoulderRightZ = baseZ;
@@ -1321,7 +1317,6 @@ function drawAnimatedCharacter(baseX, baseY, baseZ){
   m = translate(identity(), m, [0, -0.25, 0]);
   draw(bufCharacterArmRight, m, [0.2, 0.5, 0.95]);
   
-  // PERNA ESQUERDA
   const hipLeftX = baseX - 0.11;
   const hipLeftY = baseY - 0.05 + bodyBob;
   const hipLeftZ = baseZ;
@@ -1331,7 +1326,6 @@ function drawAnimatedCharacter(baseX, baseY, baseZ){
   m = translate(identity(), m, [0, -0.275, 0]);
   draw(bufCharacterLegLeft, m, [0.15, 0.35, 0.7]);
   
-  // PERNA DIREITA
   const hipRightX = baseX + 0.11;
   const hipRightY = baseY - 0.05 + bodyBob;
   const hipRightZ = baseZ;
@@ -1367,13 +1361,11 @@ function update(dt){
     if(coin.active) coin.rotation += dt * 3;
   });
   
-  // Rotacionar bombas estáticas
   staticBombs.forEach(bomb => {
     bomb.rotation += bomb.rotationSpeed * dt;
   });
 }
 
-// ---------- VARIÁVEL DE TEMPO ----------
 let last = performance.now();
 
 // ---------- MAIN LOOP ----------
@@ -1384,15 +1376,12 @@ function render(){
   last = now;
   update(dt);
 
-  // CÂMERA DINÂMICA
   let camEye, camTarget;
   
   if(cameraMode === 0) {
-    // Terceira pessoa (padrão)
     camEye = [ player.x*0.3, 4.0, player.z + 6.5 ];
     camTarget = [ player.x, 0.8, player.z - 4.0 ];
   } else {
-    // Primeira pessoa (visão do personagem)
     camEye = [ player.x, player.y + 1.3, player.z ];
     camTarget = [ player.x, player.y + 1.3, player.z - 10 ];
   }
@@ -1402,7 +1391,6 @@ function render(){
   gl.clearColor(0.53,0.80,0.92,1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  // Desenhar cenário
   gl.useProgram(program);
   gl.uniformMatrix4fv(uProj, false, projMat);
   gl.uniformMatrix4fv(uView, false, viewMat);
@@ -1416,12 +1404,11 @@ function render(){
   draw(bufTrees, identity(), null, "tree");
   gl.enable(gl.CULL_FACE);
 
-  // DESENHAR PERSONAGEM APENAS EM TERCEIRA PESSOA
   if(cameraMode === 0) {
     drawAnimatedCharacter(player.x, player.y, player.z);
   }
 
-  // Desenhar barris
+  // ✅ DESENHAR BARRIS COM ILUMINAÇÃO
   gl.useProgram(programCoin);
   gl.uniformMatrix4fv(uProjectionMatrix, false, projMat);
   
@@ -1429,26 +1416,70 @@ function render(){
   gl.bindTexture(gl.TEXTURE_2D, barrelTexture);
   gl.uniform1i(uSampler, 0);
 
-  // DESABILITAR CULLING PARA OS BARRIS
   gl.disable(gl.CULL_FACE);
 
   obstacles.forEach(obs => {
     const finalMat = translate(identity(), viewMat, [obs.x, obs.y, obs.z]);
     gl.uniformMatrix4fv(uModelViewMatrix, false, finalMat);
     
-    gl.bindBuffer(gl.ARRAY_BUFFER, bufBarrel);
-    gl.vertexAttribPointer(aVertexPosition, 3, gl.FLOAT, false, 20, 0);
+    // Aplicar luz
+    if (configLuzCoin) {
+        configLuzCoin.aplicar(finalMat);
+    }
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, barrelPosBuffer);
+    gl.vertexAttribPointer(aVertexPosition, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(aVertexPosition);
-    gl.vertexAttribPointer(aTextureCoord, 2, gl.FLOAT, false, 20, 12);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, barrelUVBuffer);
+    gl.vertexAttribPointer(aTextureCoord, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(aTextureCoord);
     
-    gl.drawArrays(gl.TRIANGLES, 0, bufBarrel.count);
+    if (aNormalCoin !== -1) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, barrelNormalBuffer);
+        gl.vertexAttribPointer(aNormalCoin, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(aNormalCoin);
+    }
+    
+    gl.drawArrays(gl.TRIANGLES, 0, barrelGeom.count);
   });
 
-  // REABILITAR CULLING
   gl.enable(gl.CULL_FACE);
 
-  // Desenhar bombas estáticas na pista (COM PAVIO CURVO)
+  // ✅ DESENHAR MOEDAS COM ILUMINAÇÃO
+  gl.bindTexture(gl.TEXTURE_2D, coinTexture);
+  gl.uniform1i(uSampler, 0);
+
+  coins.forEach(coin => {
+    if(coin.active){
+      const finalMat = translate(identity(), viewMat, [coin.x, coin.y, coin.z]);
+      const rotated = rotateY(identity(), finalMat, coin.rotation);
+      gl.uniformMatrix4fv(uModelViewMatrix, false, rotated);
+      
+      // Aplicar luz
+      if (configLuzCoin) {
+          configLuzCoin.aplicar(rotated);
+      }
+      
+      gl.bindBuffer(gl.ARRAY_BUFFER, coinPosBuffer);
+      gl.vertexAttribPointer(aVertexPosition, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aVertexPosition);
+      
+      gl.bindBuffer(gl.ARRAY_BUFFER, coinUVBuffer);
+      gl.vertexAttribPointer(aTextureCoord, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(aTextureCoord);
+      
+      if (aNormalCoin !== -1) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, coinNormalBuffer);
+          gl.vertexAttribPointer(aNormalCoin, 3, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(aNormalCoin);
+      }
+      
+      gl.drawArrays(gl.TRIANGLES, 0, coinPositions.length / 3);
+    }
+  });
+
+  // Desenhar bombas estáticas
   gl.useProgram(programBomb);
   gl.uniformMatrix4fv(uBombProjectionMatrix, false, projMat);
   
@@ -1487,30 +1518,6 @@ function render(){
     gl.enableVertexAttribArray(aBombTextureCoord);
     
     gl.drawArrays(gl.TRIANGLES, 0, bombGeom.count);
-  });
-
-  // Desenhar moedas
-  gl.useProgram(programCoin);
-  gl.uniformMatrix4fv(uProjectionMatrix, false, projMat);
-  
-  gl.bindTexture(gl.TEXTURE_2D, coinTexture);
-  gl.uniform1i(uSampler, 0);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.vertexAttribPointer(aVertexPosition, 3, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(aVertexPosition);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
-  gl.vertexAttribPointer(aTextureCoord, 2, gl.FLOAT, false, 0, 0);
-  gl.enableVertexAttribArray(aTextureCoord);
-
-  coins.forEach(coin => {
-    if(coin.active){
-      const finalMat = translate(identity(), viewMat, [coin.x, coin.y, coin.z]);
-      const rotated = rotateY(identity(), finalMat, coin.rotation);
-      gl.uniformMatrix4fv(uModelViewMatrix, false, rotated);
-      gl.drawArrays(gl.TRIANGLES, 0, coinPositions.length / 3);
-    }
   });
 
   requestAnimationFrame(render);
