@@ -293,19 +293,20 @@ function createBufferWithUV(arr){
 const TRACK_LENGTH = 200;
 const LANE_WIDTH = 2.0;
 const TOTAL_WIDTH = LANE_WIDTH * 3;
+const BACK_BUFFER = 50;
 
 const trackVerts = [
-  -TOTAL_WIDTH/2, 0, 0,   0,0,
-   TOTAL_WIDTH/2, 0, 0,   1,0,
+  -TOTAL_WIDTH/2, 0, BACK_BUFFER,   0,0, 
+   TOTAL_WIDTH/2, 0, BACK_BUFFER,   1,0, 
    TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 1,1,
-  -TOTAL_WIDTH/2, 0, 0,   0,0,
+  -TOTAL_WIDTH/2, 0, BACK_BUFFER,   0,0, 
    TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 1,1,
   -TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 0,1
 ];
 const bufTrack = createBufferWithUV(trackVerts);
 
 const wallVerts = [];
-for(let z=0; z<TRACK_LENGTH; z+=2){
+for(let z=-BACK_BUFFER; z<TRACK_LENGTH; z+=2){
   const h = 0.8;
   const seg = 2.0;
   const xL = -TOTAL_WIDTH/2 - 0.05;
@@ -332,27 +333,27 @@ const rightStart = TOTAL_WIDTH/2 + 0.40;
 const rightEnd   = TOTAL_WIDTH/2 + 0.40 + GRASS_WIDTH;
 
 const grassVerts = [
-  leftStart,0,0,    0.0, 0.0,
-  leftEnd,  0,0,    1.0, 0.0,
+  leftStart,0, BACK_BUFFER,    0.0, 0.0,
+  leftEnd,  0, BACK_BUFFER,    1.0, 0.0,
   leftEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
-  leftStart,0,0,    0.0, 0.0,
+  leftStart,0, BACK_BUFFER,    0.0, 0.0,
   leftEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
   leftStart,0,-TRACK_LENGTH, 0.0, TRACK_LENGTH/4.0,
 
-  rightStart,0,0,   0.0, 0.0,
-  rightEnd,  0,0,   1.0, 0.0,
+  rightStart,0, BACK_BUFFER,   0.0, 0.0,
+  rightEnd,  0, BACK_BUFFER,   1.0, 0.0,
   rightEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
-  rightStart,0,0,   0.0, 0.0,
+  rightStart,0, BACK_BUFFER,   0.0, 0.0,
   rightEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
   rightStart,0,-TRACK_LENGTH, 0.0, TRACK_LENGTH/4.0
 ];
 const bufGrass = createBufferWithUV(grassVerts);
 
 const skyVerts = [
-  -2000,120,0, 0,0,
-   2000,120,0, 0,0,
+  -2000,120, BACK_BUFFER, 0,0, // Era 0
+   2000,120, BACK_BUFFER, 0,0, // Era 0
    2000,120,-TRACK_LENGTH, 0,0,
-  -2000,120,0, 0,0,
+  -2000,120, BACK_BUFFER, 0,0, // Era 0
    2000,120,-TRACK_LENGTH, 0,0,
   -2000,120,-TRACK_LENGTH, 0,0
 ];
@@ -1106,10 +1107,10 @@ function cleanUpObjects(playerZ) {
 const fallingBombs = [];
 let bombSpawnTimer = 0;
 const BOMB_SPAWN_INTERVAL = 2.5;
-const BOMB_START_Z = -100;
+const BOMB_START_Z = 100;
 
 function spawnBomb(){
-  if(player.z > BOMB_START_Z) return;
+  // if(player.z > BOMB_START_Z) return;
   
   const randomLane = Math.floor(Math.random() * 3);
   const randomX = LANE_CENTER_X[randomLane] + (Math.random() - 0.5) * 1.0;
@@ -1117,7 +1118,7 @@ function spawnBomb(){
   fallingBombs.push({
     x: randomX,
     y: 15 + Math.random() * 5,
-    z: player.z - 10 - Math.random() * 20,
+    z: player.z - 20 - Math.random() * 30,
     velocityY: 0,
     radius: 0.35,
     rotation: Math.random() * Math.PI * 2,
@@ -1130,15 +1131,17 @@ function updateBombs(dt){
   
   bombSpawnTimer += dt;
   
-  if(bombSpawnTimer >= BOMB_SPAWN_INTERVAL && player.z < BOMB_START_Z){
-    spawnBomb();
-    bombSpawnTimer = 0;
+  if(player.z < BOMB_START_Z) {
+      while(bombSpawnTimer >= BOMB_SPAWN_INTERVAL) {
+          spawnBomb();
+          bombSpawnTimer -= BOMB_SPAWN_INTERVAL; 
+      }
   }
   
   for(let i = fallingBombs.length - 1; i >= 0; i--){
     const bomb = fallingBombs[i];
     
-    bomb.velocityY -= 3.0 * dt;
+    bomb.velocityY -= 2.0 * dt;
     bomb.y += bomb.velocityY * dt;
     bomb.rotation += bomb.rotationSpeed * dt;
     
@@ -1267,29 +1270,43 @@ function gameOver(){
   if(isGameOver || isVictory) return;
   isGameOver = true;
   player.forwardSpeed = 0;
+
+  let recorde = localStorage.getItem('maxCoins') || 0;
+  let mensagemRecorde = "";
   
+  if (player.coinsCollected > recorde) {
+      recorde = player.coinsCollected;
+      localStorage.setItem('maxCoins', recorde);
+
+      mensagemRecorde = `<br><span style="color: #33ff33; font-size: 22px; font-weight: bold; text-shadow: 0 0 5px #00ff00;">🌟 NOVO RECORDE! 🌟</span>`;
+  } else {
+      mensagemRecorde = `<br><span style="color: #cccccc; font-size: 18px;">Recorde: ${recorde}</span>`;
+  }
+
   const gameOverDiv = document.createElement('div');
   gameOverDiv.style.cssText = `
     position: fixed;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     color: #ff0000;
     padding: 40px 60px;
     border-radius: 20px;
-    border: 5px solid #ff0000;
+    border: 4px solid #ff0000;
     font-family: Arial, sans-serif;
-    font-size: 48px;
-    font-weight: bold;
     text-align: center;
     z-index: 2000;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
   `;
+  
   gameOverDiv.innerHTML = `
-    GAME OVER!<br>
-    <span style="font-size: 24px; color: #FFD700;">Moedas: ${player.coinsCollected}</span><br>
-    <span style="font-size: 18px; color: #fff; cursor: pointer;" onclick="restartGame()">Clique para reiniciar</span>
-`;
+    <div style="font-size: 48px; font-weight: bold; margin-bottom: 10px;">GAME OVER!</div>
+    <div style="font-size: 24px; color: #FFD700; margin-bottom: 5px;">Moedas: ${player.coinsCollected}</div>
+    ${mensagemRecorde} <br><br>
+    <div style="font-size: 18px; color: #fff; cursor: pointer; border: 1px solid #fff; padding: 10px; display: inline-block; border-radius: 5px;" onclick="restartGame()">
+       Reiniciar
+    </div>
+  `;
   document.body.appendChild(gameOverDiv);
 }
 
@@ -1301,31 +1318,44 @@ function victory(){
   const elapsed = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
   const secs = (elapsed % 60).toString().padStart(2, '0');
+
+  let recorde = localStorage.getItem('maxCoins') || 0;
+  let mensagemRecorde = "";
+  
+  if (player.coinsCollected > recorde) {
+      recorde = player.coinsCollected;
+      localStorage.setItem('maxCoins', recorde);
+      mensagemRecorde = `<br><span style="color: #ccffcc; font-size: 22px; font-weight: bold;">NOVO RECORDE!</span>`;
+  } else {
+      mensagemRecorde = `<br><span style="color: #eee; font-size: 18px;">Recorde: ${recorde}</span>`;
+  }
   
   const victoryDiv = document.createElement('div');
   victoryDiv.style.cssText = `
     position: fixed;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     background: rgba(0, 100, 0, 0.95);
     color: #FFD700;
     padding: 40px 60px;
     border-radius: 20px;
-    border: 5px solid #FFD700;
+    border: 4px solid #FFD700;
     font-family: Arial, sans-serif;
-    font-size: 48px;
-    font-weight: bold;
     text-align: center;
     z-index: 2000;
     box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
   `;
-victoryDiv.innerHTML = `
-    🏆 VOCÊ VENCEU! 🏆<br>
-    <span style="font-size: 28px; color: #fff;">Tempo: ${mins}:${secs}</span><br>
-    <span style="font-size: 28px; color: #fff;">Moedas: ${player.coinsCollected}</span><br>
-    <span style="font-size: 18px; color: #FFD700; cursor: pointer; margin-top: 20px; display: inline-block;" onclick="restartGame()">Clique para jogar novamente</span>
-`;
+  
+  victoryDiv.innerHTML = `
+    <div style="font-size: 48px; font-weight: bold; margin-bottom: 10px;">🏆 VOCÊ VENCEU! 🏆</div>
+    <div style="font-size: 24px; color: #fff;">Tempo: ${mins}:${secs}</div>
+    <div style="font-size: 24px; color: #FFD700;">Moedas: ${player.coinsCollected}</div>
+    ${mensagemRecorde}
+    <br><br>
+    <div style="font-size: 18px; color: #FFD700; cursor: pointer; border: 1px solid #FFD700; padding: 10px; display: inline-block; border-radius: 5px;" onclick="restartGame()">
+       Jogar Novamente
+    </div>
+  `;
   document.body.appendChild(victoryDiv);
 }
 
