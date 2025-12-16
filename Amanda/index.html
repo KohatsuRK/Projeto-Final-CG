@@ -8,7 +8,6 @@
         body { margin: 0; background-color: #202020; overflow: hidden; font-family: 'Arial', sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; }
 
-        /* -interface do jogo */
         #ui-layer {
             position: absolute;
             top: 0;
@@ -19,10 +18,9 @@
             padding: 20px;
             box-sizing: border-box;
             
-            /* Um elemento para cada canto */
             display: flex;
             justify-content: space-between; 
-            align-items: flex-start; /* Alinha no topo */
+            align-items: flex-start;
         }
 
         .hud-panel {
@@ -36,6 +34,52 @@
             font-family: monospace;
             box-shadow: 0px 4px 6px rgba(0,0,0,0.5);
         }
+
+        .game-menu {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            color: white;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .game-menu h1 {
+            font-size: 60px;
+            color: #FFD700;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            font-style: italic;
+        }
+
+        .game-menu p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            color: #ddd;
+        }
+
+        .game-menu button {
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            background: #FFD700;
+            border: 4px solid #DAA520;
+            color: #000;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: transform 0.1s;
+        }
+
+        .game-menu button:hover {
+            transform: scale(1.1);
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -43,6 +87,20 @@
         <div class="hud-panel" id="timer-display">TIME: 00:00</div>
         
         <div class="hud-panel" id="coin-display">COINS: 0</div>
+    </div>
+
+    <div id="start-screen" class="game-menu">
+        <h1>SUPER RUNNER 3D</h1>
+        <p>Use as Setas ou A/D para mover</p>
+        <p style="font-size: 18px; color: #ff0000; margin-top: -20px;">(Aperte ESC para pausar)</p>
+        <button id="btn-start">JOGAR</button>
+    </div>
+
+    <div id="pause-screen" class="game-menu" style="display: none;">
+        <h1>JOGO PAUSADO</h1>
+        <button id="btn-resume">CONTINUAR</button>
+
+        <button id="btn-restart" style="margin-top: 20px; background-color: #ff4444; border-color: #cc0000;">REINICIAR</button>
     </div>
 
     <canvas id="glCanvas"></canvas>
