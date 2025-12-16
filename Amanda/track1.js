@@ -5,6 +5,17 @@ const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl', { antialias: true });
 if (!gl) { alert('Seu navegador não suporta WebGL.'); throw new Error('webgl'); }
 
+let isGameRunning = false;
+let isPaused = false;
+
+const startScreen = document.getElementById('start-screen');
+const pauseScreen = document.getElementById('pause-screen');
+const btnStart = document.getElementById('btn-start');
+const btnResume = document.getElementById('btn-resume');
+
+btnStart.addEventListener('click', startGame);
+btnResume.addEventListener('click', togglePause);
+
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   const w = Math.floor(window.innerWidth * dpr);
@@ -229,16 +240,12 @@ function createProgram(vsSrc, fsSrc){
   return p;
 }
 
-// Programa principal
 const program = createProgram(VS, FS);
 
-// Programa das moedas e barris COM ILUMINAÇÃO
 const programCoin = createProgram(VS_COIN, FS_COIN);
 
-// Programa das bombas
 const programBomb = createProgram(VS_BOMB, FS_BOMB);
 
-// locations programa principal
 const aPos = gl.getAttribLocation(program, 'aPos');
 const aUV  = gl.getAttribLocation(program, 'aUV');
 const uProj = gl.getUniformLocation(program, 'uProj');
@@ -249,7 +256,6 @@ const uUseTex = gl.getUniformLocation(program, 'uUseTex');
 const uTexMode = gl.getUniformLocation(program, 'uTexMode');
 const uTime = gl.getUniformLocation(program, 'uTime');
 
-// locations programa moedas/barris
 const aVertexPosition = gl.getAttribLocation(programCoin, 'aVertexPosition');
 const aTextureCoord = gl.getAttribLocation(programCoin, 'aTextureCoord');
 const aNormalCoin = gl.getAttribLocation(programCoin, 'aVertexNormal');
@@ -257,13 +263,11 @@ const uProjectionMatrix = gl.getUniformLocation(programCoin, 'uProjectionMatrix'
 const uModelViewMatrix = gl.getUniformLocation(programCoin, 'uModelViewMatrix');
 const uSampler = gl.getUniformLocation(programCoin, 'uSampler');
 
-// Configurar iluminação para moedas/barris
 let configLuzCoin = null;
 if (window.configurarIluminacao) {
     configLuzCoin = window.configurarIluminacao(gl, programCoin);
 }
 
-// locations programa bombas
 const aBombVertexPosition = gl.getAttribLocation(programBomb, 'aVertexPosition');
 const aBombTextureCoord = gl.getAttribLocation(programBomb, 'aTextureCoord');
 const uBombProjectionMatrix = gl.getUniformLocation(programBomb, 'uProjectionMatrix');
@@ -274,7 +278,7 @@ gl.enable(gl.DEPTH_TEST);
 gl.enable(gl.CULL_FACE);
 
 // ---------- VARIÁVEL DE CONTROLE DA CÂMERA ----------
-let cameraMode = 0; // 0 = terceira pessoa, 1 = primeira pessoa
+let cameraMode = 0;
 
 // ---------- utility ----------
 function createBufferWithUV(arr){
@@ -289,19 +293,20 @@ function createBufferWithUV(arr){
 const TRACK_LENGTH = 200;
 const LANE_WIDTH = 2.0;
 const TOTAL_WIDTH = LANE_WIDTH * 3;
+const BACK_BUFFER = 50;
 
 const trackVerts = [
-  -TOTAL_WIDTH/2, 0, 0,   0,0,
-   TOTAL_WIDTH/2, 0, 0,   1,0,
+  -TOTAL_WIDTH/2, 0, BACK_BUFFER,   0,0, 
+   TOTAL_WIDTH/2, 0, BACK_BUFFER,   1,0, 
    TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 1,1,
-  -TOTAL_WIDTH/2, 0, 0,   0,0,
+  -TOTAL_WIDTH/2, 0, BACK_BUFFER,   0,0, 
    TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 1,1,
   -TOTAL_WIDTH/2, 0, -TRACK_LENGTH, 0,1
 ];
 const bufTrack = createBufferWithUV(trackVerts);
 
 const wallVerts = [];
-for(let z=0; z<TRACK_LENGTH; z+=2){
+for(let z=-BACK_BUFFER; z<TRACK_LENGTH; z+=2){
   const h = 0.8;
   const seg = 2.0;
   const xL = -TOTAL_WIDTH/2 - 0.05;
@@ -328,27 +333,27 @@ const rightStart = TOTAL_WIDTH/2 + 0.40;
 const rightEnd   = TOTAL_WIDTH/2 + 0.40 + GRASS_WIDTH;
 
 const grassVerts = [
-  leftStart,0,0,    0.0, 0.0,
-  leftEnd,  0,0,    1.0, 0.0,
+  leftStart,0, BACK_BUFFER,    0.0, 0.0,
+  leftEnd,  0, BACK_BUFFER,    1.0, 0.0,
   leftEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
-  leftStart,0,0,    0.0, 0.0,
+  leftStart,0, BACK_BUFFER,    0.0, 0.0,
   leftEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
   leftStart,0,-TRACK_LENGTH, 0.0, TRACK_LENGTH/4.0,
 
-  rightStart,0,0,   0.0, 0.0,
-  rightEnd,  0,0,   1.0, 0.0,
+  rightStart,0, BACK_BUFFER,   0.0, 0.0,
+  rightEnd,  0, BACK_BUFFER,   1.0, 0.0,
   rightEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
-  rightStart,0,0,   0.0, 0.0,
+  rightStart,0, BACK_BUFFER,   0.0, 0.0,
   rightEnd,  0,-TRACK_LENGTH, 1.0, TRACK_LENGTH/4.0,
   rightStart,0,-TRACK_LENGTH, 0.0, TRACK_LENGTH/4.0
 ];
 const bufGrass = createBufferWithUV(grassVerts);
 
 const skyVerts = [
-  -2000,120,0, 0,0,
-   2000,120,0, 0,0,
+  -2000,120, BACK_BUFFER, 0,0, // Era 0
+   2000,120, BACK_BUFFER, 0,0, // Era 0
    2000,120,-TRACK_LENGTH, 0,0,
-  -2000,120,0, 0,0,
+  -2000,120, BACK_BUFFER, 0,0, // Era 0
    2000,120,-TRACK_LENGTH, 0,0,
   -2000,120,-TRACK_LENGTH, 0,0
 ];
@@ -489,13 +494,11 @@ const coinUVBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, coinUVBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coinTextureCoords), gl.STATIC_DRAW);
 
-// Calcular normais da moeda
 const coinNormals = window.calcularNormais ? window.calcularNormais(coinPositions) : [];
 const coinNormalBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, coinNormalBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coinNormals), gl.STATIC_DRAW);
 
-// Textura da moeda
 const ctx = document.createElement('canvas').getContext('2d');
 ctx.canvas.width = 1024;
 ctx.canvas.height = 512;
@@ -623,13 +626,11 @@ const barrelUVBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, barrelUVBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(barrelGeom.uvs), gl.STATIC_DRAW);
 
-// Calcular normais do barril
 const barrelNormals = window.calcularNormais ? window.calcularNormais(barrelGeom.positions) : [];
 const barrelNormalBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, barrelNormalBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(barrelNormals), gl.STATIC_DRAW);
 
-// Textura do barril
 const ctxWood = document.createElement('canvas').getContext('2d');
 ctxWood.canvas.width = 1024;
 ctxWood.canvas.height = 1024;
@@ -956,6 +957,7 @@ const projMat = perspective(null, Math.PI/3, canvas.width/canvas.height, 0.1, 20
 const LANE_CENTER_X = [ -LANE_WIDTH, 0, LANE_WIDTH ];
 const coins = [];
 
+/*
 let currentZ = -10;
 let remainingCoins = 100;
 
@@ -978,10 +980,12 @@ while(remainingCoins > 0 && currentZ > -TRACK_LENGTH + 10){
   
   currentZ -= (groupSize * 0.8) + (3 + Math.random() * 7);
 }
+*/
 
 // ---------- OBSTACLES DATA ----------
 const obstacles = [];
 
+/*
 for(let i = 0; i < 15; i++){
   const randomLane = Math.floor(Math.random() * 3);
   const randomZ = -20 - Math.random() * (TRACK_LENGTH - 30);
@@ -1002,11 +1006,13 @@ obstacles.forEach(obs => {
     }
   });
 });
+*/
 
 // ---------- BOMBAS ESTÁTICAS NA PISTA ----------
 const staticBombs = [];
 
-for(let i = 0; i < 6; i++){  // ✅ REDUZIDO DE 12 PARA 6
+/*
+for(let i = 0; i < 6; i++){
   const randomLane = Math.floor(Math.random() * 3);
   const randomZ = -25 - Math.random() * (TRACK_LENGTH - 35);
   
@@ -1037,15 +1043,74 @@ staticBombs.forEach(bomb => {
     }
   });
 });
+*/
+
+// --- SISTEMA DE GERAÇÃO INFINITA ---
+
+let nextSpawnZ = -20; 
+const SPAWN_INTERVAL = 5;
+
+function spawnWorldChunk(zPos) {
+    const lane = [ -LANE_WIDTH, 0, LANE_WIDTH ];
+    const tipo = Math.random();
+
+    if (tipo < 0.4) {
+        const randomLane = Math.floor(Math.random() * 3);
+        // Gera 5 moedas em linha
+        for(let i=0; i<5; i++){
+            coins.push({
+                x: lane[randomLane],
+                y: 0.5,
+                z: zPos - (i * 1.5),
+                active: true,
+                rotation: Math.random() * Math.PI * 2
+            });
+        }
+    } 
+    else if (tipo < 0.7) {
+        const randomLane = Math.floor(Math.random() * 3);
+        obstacles.push({
+            x: lane[randomLane],
+            y: 0.4,
+            z: zPos,
+            radius: 0.45
+        });
+    }
+    else {
+        const randomLane = Math.floor(Math.random() * 3);
+        staticBombs.push({
+            x: lane[randomLane],
+            y: 0.35,
+            z: zPos,
+            radius: 0.35,
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: 0.5 + Math.random()
+        });
+    }
+}
+
+function cleanUpObjects(playerZ) {
+    const cutoff = playerZ + 20;
+
+    for (let i = coins.length - 1; i >= 0; i--) {
+        if (coins[i].z > cutoff) coins.splice(i, 1);
+    }
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        if (obstacles[i].z > cutoff) obstacles.splice(i, 1);
+    }
+    for (let i = staticBombs.length - 1; i >= 0; i--) {
+        if (staticBombs[i].z > cutoff) staticBombs.splice(i, 1);
+    }
+}
 
 // ---------- FALLING BOMBS ----------
 const fallingBombs = [];
 let bombSpawnTimer = 0;
-const BOMB_SPAWN_INTERVAL = 2.5;  // ✅ AUMENTADO DE 1.5 PARA 2.5
-const BOMB_START_Z = -100;  // ✅ ALTERADO DE -120 PARA -100
+const BOMB_SPAWN_INTERVAL = 2.5;
+const BOMB_START_Z = 100;
 
 function spawnBomb(){
-  if(player.z > BOMB_START_Z) return;
+  // if(player.z > BOMB_START_Z) return;
   
   const randomLane = Math.floor(Math.random() * 3);
   const randomX = LANE_CENTER_X[randomLane] + (Math.random() - 0.5) * 1.0;
@@ -1053,7 +1118,7 @@ function spawnBomb(){
   fallingBombs.push({
     x: randomX,
     y: 15 + Math.random() * 5,
-    z: player.z - 10 - Math.random() * 20,
+    z: player.z - 20 - Math.random() * 30,
     velocityY: 0,
     radius: 0.35,
     rotation: Math.random() * Math.PI * 2,
@@ -1066,15 +1131,20 @@ function updateBombs(dt){
   
   bombSpawnTimer += dt;
   
-  if(bombSpawnTimer >= BOMB_SPAWN_INTERVAL && player.z < BOMB_START_Z){
-    spawnBomb();
-    bombSpawnTimer = 0;
+  if(player.z < BOMB_START_Z) {
+      while(bombSpawnTimer >= BOMB_SPAWN_INTERVAL) {
+          spawnBomb();
+          bombSpawnTimer -= BOMB_SPAWN_INTERVAL; 
+      }
   }
   
+  const gravidadeAtual = player.forwardSpeed * 0.4; 
+
   for(let i = fallingBombs.length - 1; i >= 0; i--){
     const bomb = fallingBombs[i];
     
-    bomb.velocityY -= 9.8 * dt;
+    bomb.velocityY -= gravidadeAtual * dt; 
+    
     bomb.y += bomb.velocityY * dt;
     bomb.rotation += bomb.rotationSpeed * dt;
     
@@ -1133,6 +1203,13 @@ function updateUI(){
 // ---------- EVENT LISTENER COM CÂMERA ----------
 window.addEventListener('keydown', (e)=>{
   const k = e.key.toLowerCase();
+
+  // Tecla de Pausa (ESC ou P)
+  if (e.key === 'Escape' || k === 'p') {
+      togglePause();
+  }
+
+  if (!isGameRunning || isPaused || isGameOver) return;
   
   if(k === 'arrowleft' || k === 'a'){
     player.targetLane = Math.max(0, player.targetLane - 1);
@@ -1196,28 +1273,42 @@ function gameOver(){
   if(isGameOver || isVictory) return;
   isGameOver = true;
   player.forwardSpeed = 0;
+
+  let recorde = localStorage.getItem('maxCoins') || 0;
+  let mensagemRecorde = "";
   
+  if (player.coinsCollected > recorde) {
+      recorde = player.coinsCollected;
+      localStorage.setItem('maxCoins', recorde);
+
+      mensagemRecorde = `<br><span style="color: #33ff33; font-size: 22px; font-weight: bold; text-shadow: 0 0 5px #00ff00;">NOVO RECORDE!</span>`;
+  } else {
+      mensagemRecorde = `<br><span style="color: #cccccc; font-size: 18px;">Recorde: ${recorde}</span>`;
+  }
+
   const gameOverDiv = document.createElement('div');
   gameOverDiv.style.cssText = `
     position: fixed;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     color: #ff0000;
     padding: 40px 60px;
     border-radius: 20px;
-    border: 5px solid #ff0000;
+    border: 4px solid #ff0000;
     font-family: Arial, sans-serif;
-    font-size: 48px;
-    font-weight: bold;
     text-align: center;
     z-index: 2000;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
   `;
+  
   gameOverDiv.innerHTML = `
-    GAME OVER!<br>
-    <span style="font-size: 24px; color: #FFD700;">Moedas: ${player.coinsCollected}</span><br>
-    <span style="font-size: 18px; color: #fff; cursor: pointer;" onclick="location.reload()">Clique para reiniciar</span>
+    <div style="font-size: 48px; font-weight: bold; margin-bottom: 10px;">GAME OVER!</div>
+    <div style="font-size: 24px; color: #FFD700; margin-bottom: 5px;">Moedas: ${player.coinsCollected}</div>
+    ${mensagemRecorde} <br><br>
+    <div style="font-size: 18px; color: #fff; cursor: pointer; border: 1px solid #fff; padding: 10px; display: inline-block; border-radius: 5px;" onclick="restartGame()">
+       Reiniciar
+    </div>
   `;
   document.body.appendChild(gameOverDiv);
 }
@@ -1230,30 +1321,43 @@ function victory(){
   const elapsed = Math.floor((Date.now() - startTime) / 1000);
   const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
   const secs = (elapsed % 60).toString().padStart(2, '0');
+
+  let recorde = localStorage.getItem('maxCoins') || 0;
+  let mensagemRecorde = "";
+  
+  if (player.coinsCollected > recorde) {
+      recorde = player.coinsCollected;
+      localStorage.setItem('maxCoins', recorde);
+      mensagemRecorde = `<br><span style="color: #ccffcc; font-size: 22px; font-weight: bold;">NOVO RECORDE!</span>`;
+  } else {
+      mensagemRecorde = `<br><span style="color: #eee; font-size: 18px;">Recorde: ${recorde}</span>`;
+  }
   
   const victoryDiv = document.createElement('div');
   victoryDiv.style.cssText = `
     position: fixed;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     background: rgba(0, 100, 0, 0.95);
     color: #FFD700;
     padding: 40px 60px;
     border-radius: 20px;
-    border: 5px solid #FFD700;
+    border: 4px solid #FFD700;
     font-family: Arial, sans-serif;
-    font-size: 48px;
-    font-weight: bold;
     text-align: center;
     z-index: 2000;
     box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
   `;
+  
   victoryDiv.innerHTML = `
-    🏆 VOCÊ VENCEU! 🏆<br>
-    <span style="font-size: 28px; color: #fff;">Tempo: ${mins}:${secs}</span><br>
-    <span style="font-size: 28px; color: #fff;">Moedas: ${player.coinsCollected}</span><br>
-    <span style="font-size: 18px; color: #FFD700; cursor: pointer; margin-top: 20px; display: inline-block;" onclick="location.reload()">Clique para jogar novamente</span>
+    <div style="font-size: 48px; font-weight: bold; margin-bottom: 10px;">🏆 VOCÊ VENCEU! 🏆</div>
+    <div style="font-size: 24px; color: #fff;">Tempo: ${mins}:${secs}</div>
+    <div style="font-size: 24px; color: #FFD700;">Moedas: ${player.coinsCollected}</div>
+    ${mensagemRecorde}
+    <br><br>
+    <div style="font-size: 18px; color: #FFD700; cursor: pointer; border: 1px solid #FFD700; padding: 10px; display: inline-block; border-radius: 5px;" onclick="restartGame()">
+       Jogar Novamente
+    </div>
   `;
   document.body.appendChild(victoryDiv);
 }
@@ -1287,7 +1391,9 @@ function draw(buf, model, color, texMode=null){
 let runAnimTime = 0;
 
 function drawAnimatedCharacter(baseX, baseY, baseZ){
-  runAnimTime += 0.25;
+  if (!isPaused && isGameRunning) {
+      runAnimTime += 0.25;
+  }
   
   const legAngle = Math.sin(runAnimTime) * 0.6;
   const armAngle = Math.sin(runAnimTime) * 0.5;
@@ -1339,16 +1445,50 @@ function drawAnimatedCharacter(baseX, baseY, baseZ){
 // ---------- UPDATE ----------
 function update(dt){
   if(isGameOver || isVictory) return;
+
+  const ACELERACAO = 0.1;
+  const VELOCIDADE_MAX = 12.0;
+
+  if (player.forwardSpeed < VELOCIDADE_MAX) {
+      player.forwardSpeed += ACELERACAO * dt;
+  }
+
+  while (nextSpawnZ > player.z - 120) {
+      spawnWorldChunk(nextSpawnZ);
+      nextSpawnZ -= SPAWN_INTERVAL;
+  }
+
+  while (nextSpawnZ > player.z - 120) {
+      spawnWorldChunk(nextSpawnZ);
+      nextSpawnZ -= SPAWN_INTERVAL;
+  }
+
+  cleanUpObjects(player.z);
+
+  if (player.z < -100) {
+      const shiftAmount = 100;
+
+      player.z += shiftAmount;
+
+      nextSpawnZ += shiftAmount;
+
+      coins.forEach(o => o.z += shiftAmount);
+      obstacles.forEach(o => o.z += shiftAmount);
+      staticBombs.forEach(o => o.z += shiftAmount);
+      fallingBombs.forEach(o => o.z += shiftAmount);
+  }
   
   player.z -= player.forwardSpeed * dt;
   const targetX = LANE_CENTER_X[player.targetLane];
   player.x += (targetX - player.x) * Math.min(1, 6 * dt);
   player.x = clampToWalls(player.x);
   
+  /*
   if(player.z <= -TRACK_LENGTH + 5){
     victory();
     return;
   }
+  */
   
   checkCoinCollisions();
   checkObstacleCollisions();
@@ -1366,6 +1506,64 @@ function update(dt){
   });
 }
 
+function startGame() {
+    startScreen.style.display = 'none';
+    isGameRunning = true;
+    isPaused = false;
+    
+    startTime = Date.now(); 
+}
+
+function togglePause() {
+    if (!isGameRunning || isGameOver || isVictory) return;
+
+    isPaused = !isPaused;
+
+    if (isPaused) {
+        pauseScreen.style.display = 'flex';
+    } else {
+        pauseScreen.style.display = 'none';
+        last = performance.now(); 
+    }
+}
+
+const btnRestart = document.getElementById('btn-restart');
+
+btnRestart.addEventListener('click', restartGame);
+
+function restartGame() {
+    pauseScreen.style.display = 'none';
+
+    const allDivs = document.querySelectorAll('div');
+    allDivs.forEach(div => {
+        if (div.innerText.includes("GAME OVER") || div.innerText.includes("VOCÊ VENCEU")) {
+            div.remove();
+        }
+    });
+
+    isGameOver = false;
+    isVictory = false;
+    isPaused = false;
+    isGameRunning = true;
+
+    player.laneIndex = 1;
+    player.targetLane = 1;
+    player.x = 0;
+    player.z = -1;
+    player.forwardSpeed = 6;
+    player.coinsCollected = 0;
+
+    coins.length = 0;
+    obstacles.length = 0;
+    staticBombs.length = 0;
+    fallingBombs.length = 0;
+
+    nextSpawnZ = -20; 
+
+    startTime = Date.now();
+    last = performance.now();
+}
+
 let last = performance.now();
 
 // ---------- MAIN LOOP ----------
@@ -1373,10 +1571,15 @@ function render(){
   resize();
   const now = performance.now();
   const dt = Math.min(0.05, (now-last)/1000);
-  last = now;
-  update(dt);
 
   let camEye, camTarget;
+
+  if (!isPaused && isGameRunning) {
+        last = now;
+        update(dt); 
+  } else {
+        last = now;
+  }
   
   if(cameraMode === 0) {
     camEye = [ player.x*0.3, 4.0, player.z + 6.5 ];
@@ -1408,7 +1611,6 @@ function render(){
     drawAnimatedCharacter(player.x, player.y, player.z);
   }
 
-  // ✅ DESENHAR BARRIS COM ILUMINAÇÃO
   gl.useProgram(programCoin);
   gl.uniformMatrix4fv(uProjectionMatrix, false, projMat);
   
@@ -1422,7 +1624,6 @@ function render(){
     const finalMat = translate(identity(), viewMat, [obs.x, obs.y, obs.z]);
     gl.uniformMatrix4fv(uModelViewMatrix, false, finalMat);
     
-    // Aplicar luz
     if (configLuzCoin) {
         configLuzCoin.aplicar(finalMat);
     }
@@ -1446,7 +1647,6 @@ function render(){
 
   gl.enable(gl.CULL_FACE);
 
-  // ✅ DESENHAR MOEDAS COM ILUMINAÇÃO
   gl.bindTexture(gl.TEXTURE_2D, coinTexture);
   gl.uniform1i(uSampler, 0);
 
@@ -1455,8 +1655,7 @@ function render(){
       const finalMat = translate(identity(), viewMat, [coin.x, coin.y, coin.z]);
       const rotated = rotateY(identity(), finalMat, coin.rotation);
       gl.uniformMatrix4fv(uModelViewMatrix, false, rotated);
-      
-      // Aplicar luz
+
       if (configLuzCoin) {
           configLuzCoin.aplicar(rotated);
       }
@@ -1479,7 +1678,6 @@ function render(){
     }
   });
 
-  // Desenhar bombas estáticas
   gl.useProgram(programBomb);
   gl.uniformMatrix4fv(uBombProjectionMatrix, false, projMat);
   
@@ -1503,7 +1701,6 @@ function render(){
     gl.drawArrays(gl.TRIANGLES, 0, bombGeom.count);
   });
 
-  // Desenhar bombas caindo
   fallingBombs.forEach(bomb => {
     let bombMat = translate(identity(), viewMat, [bomb.x, bomb.y, bomb.z]);
     bombMat = rotateY(identity(), bombMat, bomb.rotation);
