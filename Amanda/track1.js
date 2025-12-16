@@ -1138,10 +1138,13 @@ function updateBombs(dt){
       }
   }
   
+  const gravidadeAtual = player.forwardSpeed * 0.4; 
+
   for(let i = fallingBombs.length - 1; i >= 0; i--){
     const bomb = fallingBombs[i];
     
-    bomb.velocityY -= 2.0 * dt;
+    bomb.velocityY -= gravidadeAtual * dt; 
+    
     bomb.y += bomb.velocityY * dt;
     bomb.rotation += bomb.rotationSpeed * dt;
     
@@ -1278,7 +1281,7 @@ function gameOver(){
       recorde = player.coinsCollected;
       localStorage.setItem('maxCoins', recorde);
 
-      mensagemRecorde = `<br><span style="color: #33ff33; font-size: 22px; font-weight: bold; text-shadow: 0 0 5px #00ff00;">🌟 NOVO RECORDE! 🌟</span>`;
+      mensagemRecorde = `<br><span style="color: #33ff33; font-size: 22px; font-weight: bold; text-shadow: 0 0 5px #00ff00;">NOVO RECORDE!</span>`;
   } else {
       mensagemRecorde = `<br><span style="color: #cccccc; font-size: 18px;">Recorde: ${recorde}</span>`;
   }
